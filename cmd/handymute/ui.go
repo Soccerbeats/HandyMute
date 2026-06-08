@@ -118,9 +118,10 @@ func (u *ui) embedWebView() error {
 
 	u.web = edge.NewChromium()
 	u.web.MessageCallback = u.onMessage
-	u.web.Embed(uintptr(hwnd)) // blocks until the WebView2 controller is ready
+	ok := u.web.Embed(uintptr(hwnd)) // blocks until the WebView2 controller is ready
 	u.web.Resize()
 	u.web.NavigateToString(controlCenterHTML)
+	logf("webview: embed ok=%v, html=%d bytes, navigated", ok, len(controlCenterHTML))
 	u.onScreen = false
 	return nil
 }
@@ -134,6 +135,9 @@ func (u *ui) onMessage(raw string) {
 	}
 	if json.Unmarshal([]byte(raw), &m) != nil {
 		return
+	}
+	if m.Action != "teams" && m.Action != "speaker" {
+		logf("webview action: %s", m.Action) // skip slider spam
 	}
 	switch m.Action {
 	case "ready":

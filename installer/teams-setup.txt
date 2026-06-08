@@ -1,0 +1,19 @@
+HandyMute is installed and now running in your system tray — look for the microphone icon (click the ^ chevron if it's hidden).
+
+ONE LAST STEP THE INSTALLER CAN'T DO FOR YOU
+--------------------------------------------
+Point your meeting app's microphone at the virtual cable. Apps store this choice internally, so you have to set it once:
+
+   - Microsoft Teams:  Settings -> Devices -> Microphone -> "CABLE Output (VB-Audio Virtual Cable)"
+   - Zoom:             Settings -> Audio   -> Microphone -> "CABLE Output (VB-Audio Virtual Cable)"
+   - Discord:          Settings -> Voice & Video -> Input Device -> "CABLE Output (VB-Audio Virtual Cable)"
+
+Leave Handy (and any other dictation app) on your REAL microphone — don't point it at the cable.
+
+The installer already did the rest for you: it routed your microphone into the cable, so teammates hear you normally until you dictate.
+
+HOW TO USE IT
+-------------
+Hold Ctrl+Space to dictate with Handy. While held, your teammates hear silence (or a quiet level you choose) and all your other audio dims — then everything restores the moment you let go. The tray microphone glows green while you're talking.
+
+Click the tray icon to open the controls: enable/disable, how loud teammates hear you, how much your own audio dims, light/dark theme, and start-at-login.

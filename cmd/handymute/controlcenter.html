@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg-top: #2b2b30; --bg-bot: #161618;
+    --card: rgba(255,255,255,0.08);
+    --card-hi: rgba(255,255,255,0.14);
+    --text: #f5f5f7; --muted: rgba(235,235,245,0.6);
+    --accent: #34c759; --accent2: #0a84ff;
+    --track: rgba(255,255,255,0.18); --thumb: #ffffff;
+    --seg: rgba(255,255,255,0.10); --seg-on: rgba(255,255,255,0.95); --seg-on-text:#1c1c1e;
+    --shadow: rgba(0,0,0,0.35);
+  }
+  body.light {
+    --bg-top: #f2f2f7; --bg-bot: #e7e7ee;
+    --card: rgba(0,0,0,0.05);
+    --card-hi: rgba(0,0,0,0.09);
+    --text: #1c1c1e; --muted: rgba(60,60,67,0.6);
+    --track: rgba(0,0,0,0.16); --thumb:#ffffff;
+    --seg: rgba(0,0,0,0.06); --seg-on:#ffffff; --seg-on-text:#1c1c1e;
+    --shadow: rgba(0,0,0,0.18);
+  }
+  * { box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    font-family: "Segoe UI Variable Display", "Segoe UI", -apple-system, system-ui, sans-serif;
+    background: linear-gradient(160deg, var(--bg-top), var(--bg-bot));
+    color: var(--text);
+    padding: 14px;
+    -webkit-font-smoothing: antialiased;
+  }
+  .head { display:flex; align-items:center; gap:9px; margin: 2px 4px 12px; }
+  .dot { width:9px; height:9px; border-radius:50%; background: var(--muted); transition: all .25s; }
+  .dot.active { background: var(--accent); box-shadow: 0 0 10px 2px var(--accent); }
+  .title { font-size: 15px; font-weight: 700; letter-spacing:.2px; }
+  .spacer { flex:1; }
+  .iconbtn { width:30px; height:30px; border-radius:50%; background:var(--card);
+    display:flex; align-items:center; justify-content:center; cursor:pointer; font-size:15px;
+    transition: background .15s; }
+  .iconbtn:active { background:var(--card-hi); }
+
+  .card { background: var(--card); border-radius: 18px; padding: 14px 16px; margin-bottom: 10px;
+    box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset; }
+  .row { display:flex; align-items:center; }
+  .label { font-size: 14px; font-weight: 600; }
+  .val { margin-left:auto; font-size:13px; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+  /* iOS-style pill toggle */
+  .switch { position: relative; width: 51px; height: 31px; margin-left:auto; flex:none; }
+  .switch input { display:none; }
+  .slider-sw { position:absolute; inset:0; background: var(--track); border-radius:999px;
+    transition: background .25s; cursor:pointer; }
+  .slider-sw::before { content:""; position:absolute; width:27px; height:27px; left:2px; top:2px;
+    background:#fff; border-radius:50%; transition: transform .25s; box-shadow: 0 2px 4px var(--shadow); }
+  .switch input:checked + .slider-sw { background: var(--accent); }
+  .switch input:checked + .slider-sw::before { transform: translateX(20px); }
+
+  /* range slider */
+  input[type=range]{ -webkit-appearance:none; width:100%; height:6px; border-radius:999px;
+    background: var(--track); margin: 14px 0 4px; outline:none; }
+  input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:24px; height:24px;
+    border-radius:50%; background: var(--thumb); box-shadow: 0 2px 6px var(--shadow); cursor:pointer; }
+
+  /* segmented quick buttons */
+  .seg { display:flex; gap:6px; margin-top:12px; }
+  .seg button { flex:1; border:none; padding:10px 0; border-radius:12px; background:var(--seg);
+    color:var(--text); font-size:12.5px; font-weight:600; cursor:pointer; transition: all .15s;
+    font-family:inherit; }
+  .seg button:active { transform: scale(0.96); }
+  .seg button.on { background: var(--seg-on); color: var(--seg-on-text); box-shadow:0 2px 8px var(--shadow); }
+
+  .foot { display:flex; gap:10px; }
+  .foot .card { flex:1; margin-bottom:0; display:flex; align-items:center; }
+  .quit { text-align:center; margin-top:11px; color:var(--muted); font-size:12px; cursor:pointer; }
+  .quit:hover { color: var(--text); }
+</style>
+</head>
+<body class="dark">
+  <div class="head">
+    <div class="dot" id="dot"></div>
+    <div class="title">HandyMute</div>
+    <div class="spacer"></div>
+    <div class="iconbtn" id="theme" title="Toggle dark / light">🌙</div>
+  </div>
+
+  <div class="card">
+    <div class="row">
+      <div class="label">Enabled on Ctrl+Space</div>
+      <label class="switch"><input type="checkbox" id="enabled"><span class="slider-sw"></span></label>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row"><div class="label">Teammates hear me</div><div class="val" id="teamsVal">0%</div></div>
+    <input type="range" id="teams" min="0" max="100" value="0">
+    <div class="seg">
+      <button id="mute" data-v="0">Mute me</button>
+      <button id="quiet" data-v="6">Quiet</button>
+      <button id="full" data-v="100">Full volume</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="row"><div class="label">My volume while dictating</div><div class="val" id="spkVal">20%</div></div>
+    <input type="range" id="speaker" min="0" max="100" value="20">
+  </div>
+
+  <div class="foot">
+    <div class="card">
+      <div class="label">Start at login</div>
+      <label class="switch"><input type="checkbox" id="startup"><span class="slider-sw"></span></label>
+    </div>
+  </div>
+
+  <div class="quit" id="quit">Quit HandyMute</div>
+
+<script>
+  function send(obj){ window.external.invoke(JSON.stringify(obj)); }
+  const $ = id => document.getElementById(id);
+
+  // Go pushes state here.
+  window.applyState = function(s){
+    document.body.className = (s.theme === "light") ? "light" : "dark";
+    $("theme").textContent = (s.theme === "light") ? "☀️" : "🌙";
+    $("enabled").checked = !!s.enabled;
+    $("startup").checked = !!s.startup;
+    $("teams").value = s.teams; $("teamsVal").textContent = s.teams + "%";
+    $("speaker").value = s.speaker; $("spkVal").textContent = s.speaker + "%";
+    markSeg(s.teams);
+  };
+  // Go pushes glow/active state here.
+  window.setActive = function(on){ $("dot").classList.toggle("active", !!on); };
+
+  function markSeg(v){
+    [["mute",0],["quiet",6],["full",100]].forEach(([id,n])=>{
+      $(id).classList.toggle("on", v === n);
+    });
+  }
+
+  $("enabled").addEventListener("change", e => send({action:"enabled", value:e.target.checked}));
+  $("startup").addEventListener("change", e => send({action:"startup", value:e.target.checked}));
+
+  $("teams").addEventListener("input", e => {
+    const v = +e.target.value; $("teamsVal").textContent = v+"%"; markSeg(v);
+    send({action:"teams", value:v});
+  });
+  $("speaker").addEventListener("input", e => {
+    const v = +e.target.value; $("spkVal").textContent = v+"%";
+    send({action:"speaker", value:v});
+  });
+
+  document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
+    const v = +b.dataset.v; $("teams").value = v; $("teamsVal").textContent = v+"%"; markSeg(v);
+    send({action:"teams", value:v});
+  }));
+
+  $("theme").addEventListener("click", () => {
+    const next = document.body.classList.contains("light") ? "dark" : "light";
+    send({action:"theme", value:next});
+    document.body.className = next; $("theme").textContent = next==="light" ? "☀️" : "🌙";
+  });
+
+  $("quit").addEventListener("click", () => send({action:"quit"}));
+  document.addEventListener("keydown", e => { if (e.key === "Escape") send({action:"hide"}); });
+
+  // Ask Go for the current state once the page is ready.
+  send({action:"ready"});
+</script>
+</body>
+</html>

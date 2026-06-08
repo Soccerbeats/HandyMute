@@ -1,0 +1,7 @@
+# Build outputs (binaries + installer are distributed via Releases, not committed)
+dist/
+
+# Local test / machine-specific artifacts
+.bridge-backup/
+*.log
+handymute.conf

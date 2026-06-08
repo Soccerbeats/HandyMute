@@ -116,7 +116,8 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then:
 - Optional click-away-to-dismiss for the panel
 - Acrylic/blur background for the Control Center
 
-Contributions welcome.
+Contributions welcome — the code is split into a shared core plus per-OS backends. See
+[docs/PORTING.md](docs/PORTING.md) for the exact contract a new platform implements.
 
 ---
 

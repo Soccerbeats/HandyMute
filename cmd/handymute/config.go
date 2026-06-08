@@ -28,3 +28,11 @@ func logf(format string, args ...any) {
 		f.Close()
 	}
 }
+
+// send delivers a mute/unmute command without ever blocking the caller.
+func send(cmd chan<- bool, v bool) {
+	select {
+	case cmd <- v:
+	default:
+	}
+}

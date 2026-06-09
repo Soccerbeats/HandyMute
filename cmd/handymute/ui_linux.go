@@ -100,7 +100,7 @@ func runUI(settings *Settings, cmd chan<- bool, status <-chan bool) error {
 			setLinuxGlow(active)
 			if active {
 				uiEval("setActive(true)")
-				if linuxOverlay != nil {
+				if linuxOverlay != nil && settings.Overlay() {
 					linuxOverlay.Show()
 				}
 			} else {

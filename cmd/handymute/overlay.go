@@ -5,6 +5,8 @@ package main
 import (
 	_ "embed"
 	"fmt"
+	"sync/atomic"
+	"time"
 	"unsafe"
 
 	"github.com/jchv/go-webview2/pkg/edge"
@@ -12,6 +14,9 @@ import (
 	dec "github.com/lxn/walk/declarative"
 	"github.com/lxn/win"
 )
+
+// procSetLayeredWindowAttributes sets whole-window alpha for the layered overlay window.
+var procSetLayeredWindowAttributes = user32.NewProc("SetLayeredWindowAttributes")
 
 //go:embed overlay.html
 var overlayHTML string
@@ -28,6 +33,13 @@ const (
 	swpNoActivate = 0x0010
 	// SetLayeredWindowAttributes flag: use bAlpha for whole-window opacity.
 	lwaAlpha = 0x2
+
+	// Fade animation — ramp whole-window alpha instead of a hard show/hide. Timings and
+	// target opacity are kept in step with the Linux overlay.
+	overlayAlpha = 235 // target alpha (~92%)
+	fadeInMs     = 500
+	fadeOutMs    = 650
+	fadeTickMs   = 16
 )
 
 // statusOverlay is a compact pill that floats just below Handy's dictation bubble while
@@ -37,6 +49,8 @@ type statusOverlay struct {
 	mw       *walk.MainWindow
 	web      *edge.Chromium
 	settings *Settings
+	fadeGen  int64   // atomic; bumped per Show/Hide to supersede an in-flight fade
+	curAlpha float64 // current window alpha (touched on the UI thread only)
 }
 
 // newStatusOverlay creates and parks the overlay window. Must be called on the UI goroutine.
@@ -65,9 +79,8 @@ func newStatusOverlay(settings *Settings) (*statusOverlay, error) {
 	ex |= win.WS_EX_TOOLWINDOW | win.WS_EX_TOPMOST | wsExNoActivate | wsExLayered
 	win.SetWindowLong(hwnd, win.GWL_EXSTYLE, ex)
 
-	// ~82% opacity — matches Handy's frosted-pill look.
-	procSetLayeredWindowAttributes := user32.NewProc("SetLayeredWindowAttributes")
-	procSetLayeredWindowAttributes.Call(uintptr(hwnd), 0, 210, lwaAlpha)
+	// Start fully transparent; Show() fades it in.
+	procSetLayeredWindowAttributes.Call(uintptr(hwnd), 0, 0, lwaAlpha)
 
 	win.SetWindowPos(hwnd, win.HWND_TOPMOST, 0, 0, 0, 0,
 		win.SWP_NOMOVE|win.SWP_NOSIZE|win.SWP_FRAMECHANGED)
@@ -108,11 +121,52 @@ func (o *statusOverlay) Show() {
 	win.SetWindowPos(o.mw.Handle(), win.HWND_TOPMOST,
 		x, y, 0, 0,
 		win.SWP_NOSIZE|swpNoActivate)
+
+	o.startFade(false) // fade in
 }
 
-// Hide parks the overlay off-screen without destroying the WebView2 controller.
+// Hide fades the overlay out, then parks it off-screen (keeping WebView2 warm).
 // Safe to call only on the UI goroutine.
 func (o *statusOverlay) Hide() {
-	win.SetWindowPos(o.mw.Handle(), 0, offScreen, offScreen, 0, 0,
-		win.SWP_NOSIZE|win.SWP_NOZORDER|swpNoActivate)
+	o.startFade(true)
+}
+
+// setAlpha applies whole-window opacity (0..255).
+func (o *statusOverlay) setAlpha(a byte) {
+	procSetLayeredWindowAttributes.Call(uintptr(o.mw.Handle()), 0, uintptr(a), lwaAlpha)
+}
+
+// startFade ramps the window alpha toward the target (in: ->overlayAlpha; out: ->0, then
+// parks off-screen). A newer Show/Hide bumps fadeGen so any in-flight fade bails out.
+func (o *statusOverlay) startFade(out bool) {
+	gen := atomic.AddInt64(&o.fadeGen, 1)
+	dur, target := fadeInMs, float64(overlayAlpha)
+	if out {
+		dur, target = fadeOutMs, 0
+	}
+	start := o.curAlpha
+	steps := dur / fadeTickMs
+	if steps < 1 {
+		steps = 1
+	}
+	go func() {
+		for i := 1; i <= steps; i++ {
+			time.Sleep(fadeTickMs * time.Millisecond)
+			if atomic.LoadInt64(&o.fadeGen) != gen {
+				return // superseded
+			}
+			v := start + (target-start)*float64(i)/float64(steps)
+			o.mw.Synchronize(func() {
+				if atomic.LoadInt64(&o.fadeGen) != gen {
+					return
+				}
+				o.curAlpha = v
+				o.setAlpha(byte(v + 0.5))
+				if out && i == steps {
+					win.SetWindowPos(o.mw.Handle(), 0, offScreen, offScreen, 0, 0,
+						win.SWP_NOSIZE|win.SWP_NOZORDER|swpNoActivate)
+				}
+			})
+		}
+	}()
 }

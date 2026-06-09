@@ -3,6 +3,8 @@
 #include "gtk_linux.h"
 #include <stdlib.h>
 #include <string.h>
+#include <X11/Xlib.h>
+#include <X11/Xutil.h>
 
 GtkWidget *win;
 WebKitWebView *webview;
@@ -159,18 +161,128 @@ void ui_run(void) { gtk_main(); }
 static GtkWidget *overlayWin;
 static GtkWidget *overlayLabel;
 
-static void overlay_position(void) {
-    GdkDisplay  *disp    = gdk_display_get_default();
-    GdkMonitor  *mon     = gdk_display_get_primary_monitor(disp);
-    GdkRectangle work;
-    gdk_monitor_get_workarea(mon, &work);
+// Handy renders its recording pill at the top of a 200x200 host window. This is the
+// vertical offset from that window's top edge to just below the visible pill — a Handy
+// UI metric, not a screen coordinate, so our overlay still tracks wherever Handy moves.
+#define HANDY_PILL_OFFSET 44
+// Handy's visible pill sits a few px left of its 200px window's center; nudge to match.
+#define HANDY_PILL_DX -4
 
+// find_handy_overlay walks the X window tree for Handy's recording overlay, matched on
+// WM_CLASS "Handy" + WM_NAME "Recording" (distinguishes it from Handy's main window).
+static Window find_handy_overlay(Display *d, Window w) {
+    Window found = 0;
+    XClassHint ch;
+    if (XGetClassHint(d, w, &ch)) {
+        int match = ch.res_class && strcmp(ch.res_class, "Handy") == 0;
+        if (ch.res_name)  XFree(ch.res_name);
+        if (ch.res_class) XFree(ch.res_class);
+        if (match) {
+            char *name = NULL;
+            if (XFetchName(d, w, &name) && name) {
+                if (strcmp(name, "Recording") == 0) found = w;
+                XFree(name);
+            }
+        }
+    }
+    if (found) return found;
+
+    Window root, parent, *children;
+    unsigned int n;
+    if (XQueryTree(d, w, &root, &parent, &children, &n)) {
+        for (unsigned int i = 0; i < n && !found; i++)
+            found = find_handy_overlay(d, children[i]);
+        if (children) XFree(children);
+    }
+    return found;
+}
+
+// handy_overlay_geom returns Handy's recording-window geometry in root coordinates.
+static gboolean handy_overlay_geom(int *ox, int *oy, int *ow, int *oh) {
+    Display *d = XOpenDisplay(NULL);
+    if (!d) return FALSE;
+    Window root = DefaultRootWindow(d);
+    Window hw = find_handy_overlay(d, root);
+    gboolean ok = FALSE;
+    if (hw) {
+        Window r, child;
+        int gx, gy, ax, ay;
+        unsigned int gw, gh, bw, depth;
+        if (XGetGeometry(d, hw, &r, &gx, &gy, &gw, &gh, &bw, &depth) &&
+            XTranslateCoordinates(d, hw, root, 0, 0, &ax, &ay, &child)) {
+            *ox = ax; *oy = ay; *ow = (int)gw; *oh = (int)gh;
+            ok = TRUE;
+        }
+    }
+    XCloseDisplay(d);
+    return ok;
+}
+
+static void overlay_position(void) {
     GtkRequisition nat;
     gtk_widget_get_preferred_size(overlayWin, NULL, &nat);
 
-    int x = work.x + (work.width  - nat.width)  / 2;
-    int y = work.y +  work.height - nat.height - 8;
+    // Horizontal: always centered on the full screen. Vertical: tucked under Handy's
+    // pill (following it) when found, else the bottom of the screen.
+    GdkDisplay  *disp = gdk_display_get_default();
+    GdkMonitor  *mon  = gdk_display_get_primary_monitor(disp);
+    GdkRectangle geo;
+    gdk_monitor_get_geometry(mon, &geo);
+    int x = geo.x + (geo.width - nat.width) / 2;
+
+    int hx, hy, hw, hh;
+    if (handy_overlay_geom(&hx, &hy, &hw, &hh)) {
+        int y = hy + HANDY_PILL_OFFSET;
+        gtk_window_move(GTK_WINDOW(overlayWin), x, y);
+        return;
+    }
+
+    int y = geo.y + geo.height - nat.height - 8;
     gtk_window_move(GTK_WINDOW(overlayWin), x, y);
+}
+
+// While shown, re-query Handy's live position so our pill follows it in real time.
+static guint overlayTrackId = 0;
+
+static gboolean overlay_track_cb(gpointer d) {
+    overlay_position();
+    return G_SOURCE_CONTINUE;
+}
+
+// Opacity fade: fade in over FADE_IN_MS, fade out over FADE_OUT_MS, then hide the window.
+#define OVERLAY_OPACITY 0.92
+#define FADE_IN_MS      500.0
+#define FADE_OUT_MS     650.0
+#define FADE_TICK_MS    16
+
+static guint   overlayFadeId = 0;
+static double  overlayCur    = 0.0;  // current window opacity
+static double  overlayStep   = 0.0;  // signed opacity delta per tick
+
+static gboolean overlay_fade_cb(gpointer d) {
+    overlayCur += overlayStep;
+    if (overlayStep > 0 && overlayCur >= OVERLAY_OPACITY) {        // fade-in done
+        overlayCur = OVERLAY_OPACITY;
+        gtk_widget_set_opacity(overlayWin, overlayCur);
+        overlayFadeId = 0;
+        return G_SOURCE_REMOVE;
+    }
+    if (overlayStep < 0 && overlayCur <= 0.0) {                    // fade-out done — hide
+        overlayCur = 0.0;
+        gtk_widget_set_opacity(overlayWin, 0.0);
+        gtk_widget_hide(overlayWin);
+        overlayFadeId = 0;
+        return G_SOURCE_REMOVE;
+    }
+    gtk_widget_set_opacity(overlayWin, overlayCur);
+    return G_SOURCE_CONTINUE;
+}
+
+static void overlay_start_fade(gboolean out) {
+    if (overlayFadeId) { g_source_remove(overlayFadeId); overlayFadeId = 0; }
+    double dur = out ? FADE_OUT_MS : FADE_IN_MS;
+    overlayStep = (out ? -OVERLAY_OPACITY : OVERLAY_OPACITY) * (FADE_TICK_MS / dur);
+    overlayFadeId = g_timeout_add(FADE_TICK_MS, overlay_fade_cb, NULL);
 }
 
 static gboolean overlay_show_idle(gpointer data) {
@@ -178,12 +290,20 @@ static gboolean overlay_show_idle(gpointer data) {
     gtk_label_set_markup(GTK_LABEL(overlayLabel), markup);
     free(markup);
     overlay_position();
+    gtk_widget_set_opacity(overlayWin, overlayCur);  // resume from current (0, or mid fade-out)
     gtk_widget_show_all(overlayWin);
+    if (overlayTrackId == 0)
+        overlayTrackId = g_timeout_add(120, overlay_track_cb, NULL);
+    overlay_start_fade(FALSE);                        // fade in
     return G_SOURCE_REMOVE;
 }
 
 static gboolean overlay_hide_idle(gpointer data) {
-    gtk_widget_hide(overlayWin);
+    if (overlayTrackId) {
+        g_source_remove(overlayTrackId);
+        overlayTrackId = 0;
+    }
+    overlay_start_fade(TRUE);                          // fade out, then hide in the callback
     return G_SOURCE_REMOVE;
 }
 
@@ -195,18 +315,27 @@ void overlay_init(void) {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(overlayWin), TRUE);
     gtk_window_set_keep_above(GTK_WINDOW(overlayWin), TRUE);
     gtk_window_set_accept_focus(GTK_WINDOW(overlayWin), FALSE);
-    gtk_widget_set_opacity(overlayWin, 0.82);
+    gtk_widget_set_opacity(overlayWin, 0.0);  // starts transparent; fades in on show
 
-    // Dark pill background with rounded corners (compositor required for radius).
+    // Give the window an alpha-capable visual so the corners outside the rounded
+    // background are transparent — otherwise the radius has nothing to clip and the
+    // window reads as a square. Requires a compositor.
+    GdkScreen *screen = gtk_widget_get_screen(overlayWin);
+    GdkVisual *rgba = gdk_screen_get_rgba_visual(screen);
+    if (rgba) gtk_widget_set_visual(overlayWin, rgba);
+
+    // Capsule pill: large border-radius (GTK clamps to half-height) rounds the ends.
+    // The transparent window node lets the rounded background show as a true pill.
     GtkCssProvider *css = gtk_css_provider_new();
     gtk_css_provider_load_from_data(css,
-        ".hm-overlay { background-color: #1c1c1e; border-radius: 17px; }"
-        ".hm-overlay label { padding: 8px 16px; }",
+        ".hm-overlay { background-color: #121214; border-radius: 999px; }"
+        ".hm-overlay label { padding: 5px 10px; }",
         -1, NULL);
-    GtkStyleContext *sc = gtk_widget_get_style_context(overlayWin);
-    gtk_style_context_add_provider(sc,
+    // Register screen-wide, not on the window's context — a per-widget provider does not
+    // cascade to children, so ".hm-overlay label" would never reach the label (padding).
+    gtk_style_context_add_provider_for_screen(screen,
         GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    gtk_style_context_add_class(sc, "hm-overlay");
+    gtk_style_context_add_class(gtk_widget_get_style_context(overlayWin), "hm-overlay");
 
     overlayLabel = gtk_label_new(NULL);
     gtk_label_set_use_markup(GTK_LABEL(overlayLabel), TRUE);

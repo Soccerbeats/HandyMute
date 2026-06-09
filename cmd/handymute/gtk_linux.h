@@ -22,4 +22,8 @@ void ui_tray_set_icon(const char *iconPath);
 void ui_init(const char *html);
 void ui_run(void);
 
+void overlay_init(void);
+void overlay_show(const char *markup);
+void overlay_hide(void);
+
 #endif

@@ -1,0 +1,68 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Build Windows binaries
+        run: |
+          go build -trimpath -ldflags="-H windowsgui -s -w" -o dist/handymute.exe ./cmd/handymute
+          go build -trimpath -o dist/handymute-console.exe ./cmd/handymute
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-binaries
+          path: dist/handymute*.exe
+
+  build-linux:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+      - name: Install GTK3 + WebKit2GTK + XRecord deps
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libxtst-dev pkg-config
+      - name: Build Linux binary
+        run: |
+          go build -trimpath -o dist/handymute-linux-amd64 ./cmd/handymute
+          chmod +x dist/handymute-linux-amd64
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-binary
+          path: dist/handymute-linux-amd64
+
+  release:
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-binaries
+          path: dist/
+      - uses: actions/download-artifact@v4
+        with:
+          name: linux-binary
+          path: dist/
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/handymute.exe
+            dist/handymute-console.exe
+            dist/handymute-linux-amd64
+          generate_release_notes: true

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-user-select: none; user-select: none; }
+  html, body {
+    height: 100%; overflow: hidden;
+    font-family: "Segoe UI Variable Display", "Segoe UI", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    background: #1c1c1e;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .pill {
+    display: flex; align-items: center; gap: 8px;
+    padding: 0 16px; height: 100%;
+    white-space: nowrap;
+  }
+  .dot {
+    width: 7px; height: 7px; flex: none; border-radius: 50%;
+    background: #34c759;
+    box-shadow: 0 0 7px 2px rgba(52,199,89,.65);
+    animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%, 100% { opacity: 1; }
+    50%       { opacity: .45; }
+  }
+  .label {
+    font-size: 11.5px; font-weight: 700; color: #34c759;
+    letter-spacing: .5px; text-transform: uppercase;
+  }
+  .sep { font-size: 11px; color: rgba(235,235,245,.3); }
+  .stats {
+    font-size: 11.5px; color: rgba(235,235,245,.72);
+    font-variant-numeric: tabular-nums;
+  }
+</style>
+</head>
+<body>
+<div class="pill">
+  <div class="dot"></div>
+  <div class="label">Active</div>
+  <div class="sep">&#183;</div>
+  <div class="stats" id="s">out 0% &#183; in 20%</div>
+</div>
+<script>
+  window.update = function(out, inp) {
+    var outLabel = out === 0 ? 'muted' : 'out ' + out + '%';
+    document.getElementById('s').textContent = outLabel + ' · in ' + inp + '%';
+  };
+</script>
+</body>
+</html>

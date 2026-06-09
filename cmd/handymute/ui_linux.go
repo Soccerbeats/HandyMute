@@ -16,9 +16,10 @@ import (
 )
 
 var (
-	uiSettings *Settings
-	uiCmd      chan<- bool
-	iconDir    string
+	uiSettings    *Settings
+	uiCmd         chan<- bool
+	iconDir       string
+	linuxOverlay  *statusOverlay
 )
 
 // ---- UI glue ----
@@ -88,13 +89,25 @@ func runUI(settings *Settings, cmd chan<- bool, status <-chan bool) error {
 	C.ui_tray_init(cicon)
 	C.free(unsafe.Pointer(cicon))
 
+	if ov, err := newStatusOverlay(settings); err != nil {
+		logf("overlay init failed (non-fatal): %v", err)
+	} else {
+		linuxOverlay = ov
+	}
+
 	go func() {
 		for active := range status {
 			setLinuxGlow(active)
 			if active {
 				uiEval("setActive(true)")
+				if linuxOverlay != nil {
+					linuxOverlay.Show()
+				}
 			} else {
 				uiEval("setActive(false)")
+				if linuxOverlay != nil {
+					linuxOverlay.Hide()
+				}
 			}
 		}
 	}()

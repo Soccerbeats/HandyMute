@@ -38,6 +38,7 @@ type ui struct {
 	mw         *walk.MainWindow
 	web        *edge.Chromium
 	notifyIcon *walk.NotifyIcon
+	overlay    *statusOverlay
 
 	iconNormal *walk.Icon
 	iconGlow   *walk.Icon
@@ -92,13 +93,28 @@ func runUI(settings *Settings, cmd chan<- bool, status <-chan bool) error {
 		return err
 	}
 
+	// Status bubble overlay — created after the main window so WebView2 shares the process.
+	if ov, err := newStatusOverlay(settings); err != nil {
+		logf("overlay init failed (non-fatal): %v", err)
+	} else {
+		u.overlay = ov
+	}
+
 	// Glow the tray icon + the panel's status dot while ctrl+space is held.
+	// Also show/hide the status bubble overlay.
 	go func() {
 		for active := range status {
 			a := active
 			u.mw.Synchronize(func() {
 				u.setGlow(a)
 				u.eval("setActive(%t)", a)
+				if u.overlay != nil {
+					if a {
+						u.overlay.Show()
+					} else {
+						u.overlay.Hide()
+					}
+				}
 			})
 		}
 	}()

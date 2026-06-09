@@ -153,3 +153,62 @@ void ui_init(const char *html) {
 }
 
 void ui_run(void) { gtk_main(); }
+
+// ---- Status overlay pill ----
+
+static GtkWidget *overlayWin;
+static GtkWidget *overlayLabel;
+
+static void overlay_position(void) {
+    GdkDisplay  *disp    = gdk_display_get_default();
+    GdkMonitor  *mon     = gdk_display_get_primary_monitor(disp);
+    GdkRectangle work;
+    gdk_monitor_get_workarea(mon, &work);
+
+    GtkRequisition nat;
+    gtk_widget_get_preferred_size(overlayWin, NULL, &nat);
+
+    int x = work.x + (work.width  - nat.width)  / 2;
+    int y = work.y +  work.height - nat.height - 8;
+    gtk_window_move(GTK_WINDOW(overlayWin), x, y);
+}
+
+static gboolean overlay_show_idle(gpointer data) {
+    char *markup = (char*)data;
+    gtk_label_set_markup(GTK_LABEL(overlayLabel), markup);
+    free(markup);
+    overlay_position();
+    gtk_widget_show_all(overlayWin);
+    return G_SOURCE_REMOVE;
+}
+
+static gboolean overlay_hide_idle(gpointer data) {
+    gtk_widget_hide(overlayWin);
+    return G_SOURCE_REMOVE;
+}
+
+void overlay_show(const char *markup) { g_idle_add(overlay_show_idle, strdup(markup)); }
+void overlay_hide(void)               { g_idle_add(overlay_hide_idle, NULL); }
+
+void overlay_init(void) {
+    overlayWin = gtk_window_new(GTK_WINDOW_POPUP);
+    gtk_window_set_skip_taskbar_hint(GTK_WINDOW(overlayWin), TRUE);
+    gtk_window_set_keep_above(GTK_WINDOW(overlayWin), TRUE);
+    gtk_window_set_accept_focus(GTK_WINDOW(overlayWin), FALSE);
+    gtk_widget_set_opacity(overlayWin, 0.82);
+
+    // Dark pill background with rounded corners (compositor required for radius).
+    GtkCssProvider *css = gtk_css_provider_new();
+    gtk_css_provider_load_from_data(css,
+        ".hm-overlay { background-color: #1c1c1e; border-radius: 17px; }"
+        ".hm-overlay label { padding: 8px 16px; }",
+        -1, NULL);
+    GtkStyleContext *sc = gtk_widget_get_style_context(overlayWin);
+    gtk_style_context_add_provider(sc,
+        GTK_STYLE_PROVIDER(css), GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
+    gtk_style_context_add_class(sc, "hm-overlay");
+
+    overlayLabel = gtk_label_new(NULL);
+    gtk_label_set_use_markup(GTK_LABEL(overlayLabel), TRUE);
+    gtk_container_add(GTK_CONTAINER(overlayWin), overlayLabel);
+}

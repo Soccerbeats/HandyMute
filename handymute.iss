@@ -4,7 +4,7 @@
 ; one manual step (pointing the meeting app's mic at CABLE Output).
 
 #define AppName "HandyMute"
-#define AppVersion "1.0.0"
+#define AppVersion "1.1.0"
 #define AppExe "handymute.exe"
 #define VBCableURL "https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack43.zip"
 

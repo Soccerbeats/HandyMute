@@ -16,14 +16,16 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.22'
-      - name: Build Windows binaries
+      - name: Build handymute.exe
+        run: go build -trimpath -ldflags="-H windowsgui -s -w" -o dist/handymute.exe ./cmd/handymute
+      - name: Build installer with Inno Setup
         run: |
-          go build -trimpath -ldflags="-H windowsgui -s -w" -o dist/handymute.exe ./cmd/handymute
-          go build -trimpath -o dist/handymute-console.exe ./cmd/handymute
+          $version = "${{ github.ref_name }}".TrimStart("v")
+          iscc /DAppVersion=$version handymute.iss
       - uses: actions/upload-artifact@v4
         with:
-          name: windows-binaries
-          path: dist/handymute*.exe
+          name: windows-installer
+          path: dist/HandyMute-Setup.exe
 
   build-linux:
     runs-on: ubuntu-22.04
@@ -52,7 +54,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
-          name: windows-binaries
+          name: windows-installer
           path: dist/
       - uses: actions/download-artifact@v4
         with:
@@ -62,7 +64,6 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            dist/handymute.exe
-            dist/handymute-console.exe
+            dist/HandyMute-Setup.exe
             dist/handymute-linux-amd64
           generate_release_notes: true

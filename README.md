@@ -2,6 +2,10 @@
 
 A tiny Windows tray app for people who dictate with [Handy](https://github.com/cjpais/Handy) (push-to-talk speech-to-text on **Ctrl+Space**) while in a call.
 
+<p align="center">
+  <img src="assets/demo.gif" alt="HandyMute Control Center panel in action" width="300">
+</p>
+
 When you hold Ctrl+Space to dictate, you don't want your teammates on Teams/Zoom/Discord to hear you talking to your computer — but Handy still needs the mic. HandyMute solves that:
 
 **While Ctrl+Space is held:**
@@ -130,7 +134,8 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then:
 - Optional click-away-to-dismiss for the panel
 - Acrylic/blur background for the Control Center
 
-Contributions welcome.
+Contributions welcome — the code is split into a shared core plus per-OS backends. See
+[docs/PORTING.md](docs/PORTING.md) for the exact contract a new platform implements.
 
 ---
 

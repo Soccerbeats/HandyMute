@@ -2,6 +2,10 @@ package main
 
 import "encoding/json"
 
+// version is shown in the Control Center (next to "Quit HandyMute"). Release builds set it
+// via -ldflags "-X main.version=<tag>"; local builds show "dev".
+var version = "dev"
+
 // handleControlMessage processes one JSON command from the Control Center page. eval runs a
 // JS snippet in the page; setGlow swaps the tray glow; cmd signals the audio worker.
 func handleControlMessage(raw string, settings *Settings, cmd chan<- bool, eval func(js string), setGlow func(bool)) {
@@ -69,6 +73,7 @@ func pushControlState(settings *Settings, eval func(js string)) {
 		"startup":        startupEnabled(),
 		"theme":          settings.Theme(),
 		"overlay":        settings.Overlay(),
+		"version":        version,
 	}
 	b, err := json.Marshal(state)
 	if err != nil {

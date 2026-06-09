@@ -1,5 +1,3 @@
-//go:build windows
-
 package main
 
 import (
@@ -7,8 +5,6 @@ import (
 	"image/color"
 	"image/draw"
 	"math"
-
-	"github.com/lxn/walk"
 )
 
 // Tray-icon colors.
@@ -17,24 +13,10 @@ var (
 	micGreen = color.RGBA{R: 52, G: 199, B: 89, A: 255}   // iOS green, while actively dictating
 )
 
-// loadIcons builds the two tray icons entirely in code (no asset files): a neutral white
-// microphone, and a green microphone wrapped in a green glow shown while ctrl+space is held.
-// Both share the same canvas size so swapping them doesn't change the apparent icon size.
-func loadIcons() (normal, glow *walk.Icon) {
-	if ic, err := walk.NewIconFromImageForDPI(micCanvas(micIdle), 96); err == nil {
-		normal = ic
-	}
-	if ic, err := walk.NewIconFromImageForDPI(withHalo(micCanvas(micGreen), micGreen), 96); err == nil {
-		glow = ic
-	}
-	return normal, glow
-}
-
 const iconSize = 44 // canvas px; leaves padding around the 32-ish mic for the glow halo
 
 // micCanvas renders a microphone glyph in col on a transparent iconSize×iconSize canvas,
-// anti-aliased via 4x supersampling. RGB is held constant and only alpha varies, so edges
-// blend cleanly with no dark fringe.
+// anti-aliased via 4x supersampling.
 func micCanvas(col color.RGBA) *image.RGBA {
 	const ss = 4
 	out := image.NewRGBA(image.Rect(0, 0, iconSize, iconSize))
@@ -58,20 +40,14 @@ func micCanvas(col color.RGBA) *image.RGBA {
 	return out
 }
 
-// micInside reports whether point (x,y) (in iconSize coordinates, center x=22) lies within
-// the microphone shape: a rounded capsule, a U-shaped cradle cupping its lower half, a stand,
-// and a base bar.
 func micInside(x, y float64) bool {
-	// Capsule (the mic head).
 	if roundRect(x, y, 16, 7, 28, 25, 6) {
 		return true
 	}
-	// Cradle: ring around (22,22), open at the top where the capsule emerges.
 	dx, dy := x-22, y-22
 	if d := math.Hypot(dx, dy); d <= 11 && d >= 8 && dy >= -7 {
 		return true
 	}
-	// Stand and base.
 	if roundRect(x, y, 21, 33, 23, 38, 1) {
 		return true
 	}
@@ -81,8 +57,6 @@ func micInside(x, y float64) bool {
 	return false
 }
 
-// roundRect reports whether (px,py) is inside the rounded rectangle [x0,y0]-[x1,y1] with
-// corner radius r.
 func roundRect(px, py, x0, y0, x1, y1, r float64) bool {
 	if px < x0 || px > x1 || py < y0 || py > y1 {
 		return false
@@ -102,8 +76,7 @@ func clampF(v, lo, hi float64) float64 {
 	return v
 }
 
-// withHalo returns a new image with a soft glow (in glowColor) behind the opaque pixels of
-// mic, then the mic composited on top — making it read as "lit up".
+// withHalo returns a new image with a soft glow behind the opaque pixels of mic.
 func withHalo(mic *image.RGBA, glowColor color.RGBA) *image.RGBA {
 	b := mic.Bounds()
 	res := image.NewRGBA(b)

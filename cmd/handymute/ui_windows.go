@@ -3,7 +3,6 @@
 package main
 
 import (
-	_ "embed"
 	"encoding/json"
 	"fmt"
 	"runtime"
@@ -18,9 +17,6 @@ import (
 )
 
 const spiGetWorkArea = 0x0030 // SystemParametersInfo: usable desktop area (excludes taskbar)
-
-//go:embed controlcenter.html
-var controlCenterHTML string
 
 var (
 	dwmapi                    = windows.NewLazySystemDLL("dwmapi.dll")
@@ -130,73 +126,39 @@ func (u *ui) embedWebView() error {
 
 // onMessage handles JSON commands posted from the page. It runs on the UI goroutine (invoked
 // during WebView2 message dispatch), so it may touch settings, Walk, and the webview freely.
+// All settings actions go through the shared handler; only the Windows flyout window-management
+// actions (hide/quit) are handled here.
 func (u *ui) onMessage(raw string) {
 	var m struct {
-		Action string          `json:"action"`
-		Value  json.RawMessage `json:"value"`
+		Action string `json:"action"`
 	}
-	if json.Unmarshal([]byte(raw), &m) != nil {
-		return
-	}
-	if m.Action != "teams" && m.Action != "speaker" {
-		logf("webview action: %s", m.Action) // skip slider spam
-	}
-	switch m.Action {
-	case "ready":
-		u.pushState()
-	case "enabled":
-		var on bool
-		json.Unmarshal(m.Value, &on)
-		u.settings.SetEnabled(on)
-		if !on {
-			send(u.cmd, false)
-			u.setGlow(false)
+	if json.Unmarshal([]byte(raw), &m) == nil {
+		switch m.Action {
+		case "hide":
+			u.mw.Hide()
+			return
+		case "quit":
+			walk.App().Exit(0)
+			return
 		}
-	case "teams":
-		var v int
-		json.Unmarshal(m.Value, &v)
-		u.settings.SetTeamsLevel(float32(v) / 100)
-	case "speaker":
-		var v int
-		json.Unmarshal(m.Value, &v)
-		u.settings.SetSpeakerDuck(float32(v) / 100)
-	case "startup":
-		var on bool
-		json.Unmarshal(m.Value, &on)
-		var err error
-		if on {
-			err = installStartup()
-		} else {
-			err = uninstallStartup()
-		}
-		if err != nil {
-			logf("start-at-login toggle failed: %v", err)
-		}
-	case "theme":
-		var t string
-		json.Unmarshal(m.Value, &t)
-		u.settings.SetTheme(t)
-	case "hide":
-		u.mw.Hide()
-	case "quit":
-		walk.App().Exit(0)
 	}
+	handleControlMessage(raw, u.settings, u.cmd,
+		func(js string) {
+			if u.web != nil {
+				u.web.Eval(js)
+			}
+		},
+		u.setGlow,
+	)
 }
 
 // pushState sends the current settings to the page so the controls reflect reality.
 func (u *ui) pushState() {
-	state := map[string]any{
-		"enabled": u.settings.Enabled(),
-		"teams":   pct(u.settings.TeamsLevel()),
-		"speaker": pct(u.settings.SpeakerDuck()),
-		"startup": startupEnabled(),
-		"theme":   u.settings.Theme(),
-	}
-	b, err := json.Marshal(state)
-	if err != nil {
-		return
-	}
-	u.eval("applyState(%s)", string(b))
+	pushControlState(u.settings, func(js string) {
+		if u.web != nil {
+			u.web.Eval(js)
+		}
+	})
 }
 
 // eval runs a JS snippet in the page. Safe to call only on the UI goroutine.
@@ -313,9 +275,4 @@ func (u *ui) setGlow(on bool) {
 	if ic != nil && u.notifyIcon != nil {
 		u.notifyIcon.SetIcon(ic)
 	}
-}
-
-// pct converts a 0..1 scalar to a 0..100 integer for the sliders/labels.
-func pct(v float32) int {
-	return int(v*100 + 0.5)
 }

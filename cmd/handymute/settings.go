@@ -17,8 +17,12 @@ type Settings struct {
 	mu sync.RWMutex
 
 	enabled     bool    // master on/off; when off, ctrl+space is ignored (Handy still gets it)
-	speakerDuck float32 // 0..1 — level all non-cable outputs drop to while dictating
-	teamsLevel  float32 // 0..1 — level the cable feed (what teammates hear) drops to while dictating
+	speakerDuck float32 // 0..1 — Inbound: level all non-cable outputs drop to while dictating
+	teamsLevel  float32 // 0..1 — live Outbound level (cable feed) applied while dictating
+	outMute     float32 // remembered Outbound level for the Mute preset
+	outQuiet    float32 // remembered Outbound level for the Quiet preset
+	outFull     float32 // remembered Outbound level for the Full preset
+	outPreset   string  // active Outbound preset: "mute" | "quiet" | "full"
 	cableMatch  string  // case-insensitive substring identifying the VB-Cable render endpoint
 	theme       string  // UI theme for the control-center panel: "dark" or "light"
 }
@@ -34,7 +38,11 @@ func defaultSettings() *Settings {
 	return &Settings{
 		enabled:     true,
 		speakerDuck: 0.20,
-		teamsLevel:  0.00,
+		teamsLevel:  0.06,
+		outMute:     0.00,
+		outQuiet:    0.06,
+		outFull:     1.00,
+		outPreset:   "quiet",
 		cableMatch:  "cable input",
 		theme:       "dark",
 	}
@@ -88,11 +96,52 @@ func (s *Settings) TeamsLevel() float32 {
 	return s.teamsLevel
 }
 
+// SetTeamsLevel stores v as the live Outbound level and remembers it for the active preset,
+// so reselecting that preset later restores this level.
 func (s *Settings) SetTeamsLevel(v float32) {
+	v = clamp01(v)
 	s.mu.Lock()
-	s.teamsLevel = clamp01(v)
+	switch s.outPreset {
+	case "mute":
+		s.outMute = v
+	case "full":
+		s.outFull = v
+	default:
+		s.outQuiet = v
+	}
+	s.teamsLevel = v
 	s.mu.Unlock()
 	s.save()
+}
+
+func (s *Settings) OutboundPreset() string {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.outPreset
+}
+
+// SetOutboundPreset activates a preset and restores the Outbound level remembered for it.
+func (s *Settings) SetOutboundPreset(name string) {
+	if name != "mute" && name != "full" {
+		name = "quiet"
+	}
+	s.mu.Lock()
+	s.outPreset = name
+	s.teamsLevel = s.resolveOutLocked()
+	s.mu.Unlock()
+	s.save()
+}
+
+// resolveOutLocked returns the level remembered for the active preset. Caller holds the lock.
+func (s *Settings) resolveOutLocked() float32 {
+	switch s.outPreset {
+	case "mute":
+		return s.outMute
+	case "full":
+		return s.outFull
+	default:
+		return s.outQuiet
+	}
 }
 
 // Snapshot returns a consistent copy of the values the worker applies on a toggle.
@@ -122,7 +171,7 @@ func settingsPath() string {
 }
 
 // loadSettings reads persisted settings, falling back to defaults for anything missing or
-// malformed. Recognized keys: enabled, speaker_duck, teams_level, cable.
+// malformed. Recognized keys: enabled, speaker_duck, outbound_mute/quiet/full, outbound_preset, cable.
 func loadSettings() *Settings {
 	s := defaultSettings()
 
@@ -151,9 +200,21 @@ func loadSettings() *Settings {
 			if v, err := strconv.ParseFloat(val, 32); err == nil {
 				s.speakerDuck = clamp01(float32(v))
 			}
-		case "teams_level":
+		case "outbound_mute":
 			if v, err := strconv.ParseFloat(val, 32); err == nil {
-				s.teamsLevel = clamp01(float32(v))
+				s.outMute = clamp01(float32(v))
+			}
+		case "outbound_quiet":
+			if v, err := strconv.ParseFloat(val, 32); err == nil {
+				s.outQuiet = clamp01(float32(v))
+			}
+		case "outbound_full":
+			if v, err := strconv.ParseFloat(val, 32); err == nil {
+				s.outFull = clamp01(float32(v))
+			}
+		case "outbound_preset":
+			if val == "mute" || val == "quiet" || val == "full" {
+				s.outPreset = val
 			}
 		case "cable":
 			if val != "" {
@@ -165,6 +226,7 @@ func loadSettings() *Settings {
 			}
 		}
 	}
+	s.teamsLevel = s.resolveOutLocked() // live Outbound level always follows the active preset
 	return s
 }
 
@@ -175,10 +237,13 @@ func (s *Settings) save() {
 		"# HandyMute settings — edit via the tray UI (or here, one key=value per line)\n"+
 			"enabled=%t\n"+
 			"speaker_duck=%.3f\n"+
-			"teams_level=%.3f\n"+
+			"outbound_mute=%.3f\n"+
+			"outbound_quiet=%.3f\n"+
+			"outbound_full=%.3f\n"+
+			"outbound_preset=%s\n"+
 			"cable=%s\n"+
 			"theme=%s\n",
-		s.enabled, s.speakerDuck, s.teamsLevel, s.cableMatch, s.theme)
+		s.enabled, s.speakerDuck, s.outMute, s.outQuiet, s.outFull, s.outPreset, s.cableMatch, s.theme)
 	s.mu.RUnlock()
 
 	if err := os.WriteFile(settingsPath(), []byte(body), 0644); err != nil {

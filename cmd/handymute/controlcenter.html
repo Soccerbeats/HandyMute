@@ -44,6 +44,8 @@
 
   .card { background: var(--card); border-radius: 18px; padding: 14px 16px; margin-bottom: 10px;
     box-shadow: 0 1px 0 rgba(255,255,255,0.04) inset; }
+  .card.gated { transition: opacity .2s; }
+  .card.gated.disabled { opacity: .4; pointer-events: none; }
   .row { display:flex; align-items:center; }
   .label { font-size: 14px; font-weight: 600; }
   .val { margin-left:auto; font-size:13px; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -88,23 +90,23 @@
 
   <div class="card">
     <div class="row">
-      <div class="label">Enabled on Ctrl+Space</div>
+      <div class="label">Enabled</div>
       <label class="switch"><input type="checkbox" id="enabled"><span class="slider-sw"></span></label>
     </div>
   </div>
 
-  <div class="card">
-    <div class="row"><div class="label">Teammates hear me</div><div class="val" id="teamsVal">0%</div></div>
+  <div class="card gated">
+    <div class="row"><div class="label">Outbound Volume</div><div class="val" id="teamsVal">0%</div></div>
     <input type="range" id="teams" min="0" max="100" value="0">
     <div class="seg">
-      <button id="mute" data-v="0">Mute me</button>
-      <button id="quiet" data-v="6">Quiet</button>
-      <button id="full" data-v="100">Full volume</button>
+      <button id="mute">Mute</button>
+      <button id="quiet">Quiet</button>
+      <button id="full">Full volume</button>
     </div>
   </div>
 
-  <div class="card">
-    <div class="row"><div class="label">My volume while dictating</div><div class="val" id="spkVal">20%</div></div>
+  <div class="card gated">
+    <div class="row"><div class="label">Inbound Volume</div><div class="val" id="spkVal">20%</div></div>
     <input type="range" id="speaker" min="0" max="100" value="20">
   </div>
 
@@ -126,25 +128,31 @@
     document.body.className = (s.theme === "light") ? "light" : "dark";
     $("theme").textContent = (s.theme === "light") ? "☀️" : "🌙";
     $("enabled").checked = !!s.enabled;
+    applyEnabled(!!s.enabled);
     $("startup").checked = !!s.startup;
     $("teams").value = s.teams; $("teamsVal").textContent = s.teams + "%";
     $("speaker").value = s.speaker; $("spkVal").textContent = s.speaker + "%";
-    markSeg(s.teams);
+    markPreset(s.outboundPreset || "quiet");
   };
   // Go pushes glow/active state here.
   window.setActive = function(on){ $("dot").classList.toggle("active", !!on); };
 
-  function markSeg(v){
-    [["mute",0],["quiet",6],["full",100]].forEach(([id,n])=>{
-      $(id).classList.toggle("on", v === n);
-    });
+  function markPreset(name){
+    ["mute","quiet","full"].forEach(id => $(id).classList.toggle("on", id === name));
   }
 
-  $("enabled").addEventListener("change", e => send({action:"enabled", value:e.target.checked}));
+  function applyEnabled(on){
+    document.querySelectorAll(".gated").forEach(el => el.classList.toggle("disabled", !on));
+  }
+
+  $("enabled").addEventListener("change", e => {
+    applyEnabled(e.target.checked);
+    send({action:"enabled", value:e.target.checked});
+  });
   $("startup").addEventListener("change", e => send({action:"startup", value:e.target.checked}));
 
   $("teams").addEventListener("input", e => {
-    const v = +e.target.value; $("teamsVal").textContent = v+"%"; markSeg(v);
+    const v = +e.target.value; $("teamsVal").textContent = v+"%";
     send({action:"teams", value:v});
   });
   $("speaker").addEventListener("input", e => {
@@ -153,8 +161,8 @@
   });
 
   document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {
-    const v = +b.dataset.v; $("teams").value = v; $("teamsVal").textContent = v+"%"; markSeg(v);
-    send({action:"teams", value:v});
+    markPreset(b.id);
+    send({action:"outbound_preset", value:b.id});
   }));
 
   $("theme").addEventListener("click", () => {

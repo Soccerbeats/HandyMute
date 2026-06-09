@@ -105,11 +105,3 @@ func ctrlDown() bool {
 	r, _, _ := procGetAsyncKeyState.Call(uintptr(vkControl))
 	return r&0x8000 != 0
 }
-
-// send delivers a mute/unmute command without ever blocking the hook callback.
-func send(cmd chan<- bool, v bool) {
-	select {
-	case cmd <- v:
-	default:
-	}
-}

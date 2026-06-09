@@ -25,6 +25,7 @@ type Settings struct {
 	outPreset   string  // active Outbound preset: "mute" | "quiet" | "full"
 	cableMatch  string  // case-insensitive substring identifying the VB-Cable render endpoint
 	theme       string  // UI theme for the control-center panel: "dark" or "light"
+	overlay     bool    // show the on-screen status pill while dictating
 }
 
 // Snapshot is an immutable copy of the settings the audio worker needs for one toggle.
@@ -45,6 +46,7 @@ func defaultSettings() *Settings {
 		outPreset:   "quiet",
 		cableMatch:  "cable input",
 		theme:       "dark",
+		overlay:     true,
 	}
 }
 
@@ -70,6 +72,19 @@ func (s *Settings) SpeakerDuck() float32 {
 func (s *Settings) SetSpeakerDuck(v float32) {
 	s.mu.Lock()
 	s.speakerDuck = clamp01(v)
+	s.mu.Unlock()
+	s.save()
+}
+
+func (s *Settings) Overlay() bool {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.overlay
+}
+
+func (s *Settings) SetOverlay(v bool) {
+	s.mu.Lock()
+	s.overlay = v
 	s.mu.Unlock()
 	s.save()
 }
@@ -224,6 +239,8 @@ func loadSettings() *Settings {
 			if val == "light" || val == "dark" {
 				s.theme = val
 			}
+		case "overlay":
+			s.overlay = val == "true" || val == "1" || val == "yes"
 		}
 	}
 	s.teamsLevel = s.resolveOutLocked() // live Outbound level always follows the active preset
@@ -242,8 +259,9 @@ func (s *Settings) save() {
 			"outbound_full=%.3f\n"+
 			"outbound_preset=%s\n"+
 			"cable=%s\n"+
-			"theme=%s\n",
-		s.enabled, s.speakerDuck, s.outMute, s.outQuiet, s.outFull, s.outPreset, s.cableMatch, s.theme)
+			"theme=%s\n"+
+			"overlay=%t\n",
+		s.enabled, s.speakerDuck, s.outMute, s.outQuiet, s.outFull, s.outPreset, s.cableMatch, s.theme, s.overlay)
 	s.mu.RUnlock()
 
 	if err := os.WriteFile(settingsPath(), []byte(body), 0644); err != nil {

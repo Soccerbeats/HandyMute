@@ -52,6 +52,10 @@ func handleControlMessage(raw string, settings *Settings, cmd chan<- bool, eval 
 		var t string
 		json.Unmarshal(m.Value, &t)
 		settings.SetTheme(t)
+	case "overlay":
+		var on bool
+		json.Unmarshal(m.Value, &on)
+		settings.SetOverlay(on)
 	}
 }
 
@@ -64,6 +68,7 @@ func pushControlState(settings *Settings, eval func(js string)) {
 		"speaker":        pct(settings.SpeakerDuck()),
 		"startup":        startupEnabled(),
 		"theme":          settings.Theme(),
+		"overlay":        settings.Overlay(),
 	}
 	b, err := json.Marshal(state)
 	if err != nil {

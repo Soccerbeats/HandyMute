@@ -65,9 +65,9 @@ func newStatusOverlay(settings *Settings) (*statusOverlay, error) {
 	ex |= win.WS_EX_TOOLWINDOW | win.WS_EX_TOPMOST | wsExNoActivate | wsExLayered
 	win.SetWindowLong(hwnd, win.GWL_EXSTYLE, ex)
 
-	// ~82% opacity — matches Handy's frosted-pill look.
+	// ~92% opacity (235/255) — kept in step with the Linux overlay.
 	procSetLayeredWindowAttributes := user32.NewProc("SetLayeredWindowAttributes")
-	procSetLayeredWindowAttributes.Call(uintptr(hwnd), 0, 210, lwaAlpha)
+	procSetLayeredWindowAttributes.Call(uintptr(hwnd), 0, 235, lwaAlpha)
 
 	win.SetWindowPos(hwnd, win.HWND_TOPMOST, 0, 0, 0, 0,
 		win.SWP_NOMOVE|win.SWP_NOSIZE|win.SWP_FRAMECHANGED)

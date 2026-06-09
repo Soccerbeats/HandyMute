@@ -109,7 +109,7 @@ func runUI(settings *Settings, cmd chan<- bool, status <-chan bool) error {
 				u.setGlow(a)
 				u.eval("setActive(%t)", a)
 				if u.overlay != nil {
-					if a {
+					if a && settings.Overlay() {
 						u.overlay.Show()
 					} else {
 						u.overlay.Hide()

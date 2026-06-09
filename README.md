@@ -11,7 +11,7 @@ When you hold Ctrl+Space to dictate, you don't want your teammates on Teams/Zoom
 
 It lives in the system tray as a microphone icon that **glows green while you're talking**, with an iPhone-style Control Center panel for the settings.
 
-> **Status:** Windows 10/11 (x64) only for now. Linux (PipeWire) is on the roadmap — see [Roadmap](#roadmap).
+> **Status:** Windows 10/11 (x64) and Linux (X11, PulseAudio/PipeWire).
 
 ---
 
@@ -69,7 +69,21 @@ Physical mic ──┬───────────────────�
 
 The keyboard hook, the audio control, and the bridge setup are all done in-process; the only external piece is the VB-CABLE driver (a virtual sound card can't be created from user space).
 
-> Why a cable at all? Windows' per-app *capture* mute isn't isolated — muting the call app's mic also muted Handy. The cable physically separates the two consumers. (On Linux, PipeWire *does* isolate per-app capture, so the Linux port won't need a cable.)
+> Why a cable at all? Windows' per-app *capture* mute isn't isolated — muting the call app's mic also muted Handy. The cable physically separates the two consumers. (On Linux, PulseAudio/PipeWire *does* isolate per-app capture, so the Linux port doesn't need a cable.)
+
+## Linux (X11)
+
+HandyMute runs natively on Linux with zero audio setup — no virtual cable, no Sound-settings fiddling.
+
+Build it:
+
+```bash
+sudo apt-get install -y libx11-dev libxtst-dev libgtk-3-dev \
+    libwebkit2gtk-4.1-dev libayatana-appindicator3-dev
+./build_linux.sh   # -> dist/handymute
+```
+
+While Ctrl+Space is held, HandyMute lowers the capture-stream volume of every app reading your mic *except* Handy (so teammates hear your chosen level, default silent) and dims your default output. It speaks the PulseAudio protocol, so it works on both PipeWire and PulseAudio systems. The Control Center and tray behave as on Windows. Phase 1 targets X11; Wayland global-hotkey support is planned.
 
 ---
 
@@ -112,7 +126,7 @@ Install [Inno Setup 6](https://jrsoftware.org/isdl.php), then:
 
 ## Roadmap
 
-- **Linux (PipeWire):** per-app capture volume is isolated there, so no virtual cable needed — attenuate the call app's capture stream directly. (Wayland global-hotkey handling is the open question.)
+- **Wayland global-hotkey:** native Wayland hotkey monitoring (currently X11-only via X RECORD).
 - Optional click-away-to-dismiss for the panel
 - Acrylic/blur background for the Control Center
 

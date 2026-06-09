@@ -1,5 +1,9 @@
 # Build outputs (binaries + installer are distributed via Releases, not committed)
 dist/
+/handymute
+
+# Local tooling artifacts (knowledge-graph output, not part of the app)
+graphify-out/
 
 # Local test / machine-specific artifacts
 .bridge-backup/

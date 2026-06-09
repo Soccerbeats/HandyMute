@@ -249,14 +249,52 @@ static gboolean overlay_track_cb(gpointer d) {
     return G_SOURCE_CONTINUE;
 }
 
+// Opacity fade: fade in over FADE_IN_MS, fade out over FADE_OUT_MS, then hide the window.
+#define OVERLAY_OPACITY 0.92
+#define FADE_IN_MS      500.0
+#define FADE_OUT_MS     650.0
+#define FADE_TICK_MS    16
+
+static guint   overlayFadeId = 0;
+static double  overlayCur    = 0.0;  // current window opacity
+static double  overlayStep   = 0.0;  // signed opacity delta per tick
+
+static gboolean overlay_fade_cb(gpointer d) {
+    overlayCur += overlayStep;
+    if (overlayStep > 0 && overlayCur >= OVERLAY_OPACITY) {        // fade-in done
+        overlayCur = OVERLAY_OPACITY;
+        gtk_widget_set_opacity(overlayWin, overlayCur);
+        overlayFadeId = 0;
+        return G_SOURCE_REMOVE;
+    }
+    if (overlayStep < 0 && overlayCur <= 0.0) {                    // fade-out done — hide
+        overlayCur = 0.0;
+        gtk_widget_set_opacity(overlayWin, 0.0);
+        gtk_widget_hide(overlayWin);
+        overlayFadeId = 0;
+        return G_SOURCE_REMOVE;
+    }
+    gtk_widget_set_opacity(overlayWin, overlayCur);
+    return G_SOURCE_CONTINUE;
+}
+
+static void overlay_start_fade(gboolean out) {
+    if (overlayFadeId) { g_source_remove(overlayFadeId); overlayFadeId = 0; }
+    double dur = out ? FADE_OUT_MS : FADE_IN_MS;
+    overlayStep = (out ? -OVERLAY_OPACITY : OVERLAY_OPACITY) * (FADE_TICK_MS / dur);
+    overlayFadeId = g_timeout_add(FADE_TICK_MS, overlay_fade_cb, NULL);
+}
+
 static gboolean overlay_show_idle(gpointer data) {
     char *markup = (char*)data;
     gtk_label_set_markup(GTK_LABEL(overlayLabel), markup);
     free(markup);
     overlay_position();
+    gtk_widget_set_opacity(overlayWin, overlayCur);  // resume from current (0, or mid fade-out)
     gtk_widget_show_all(overlayWin);
     if (overlayTrackId == 0)
         overlayTrackId = g_timeout_add(120, overlay_track_cb, NULL);
+    overlay_start_fade(FALSE);                        // fade in
     return G_SOURCE_REMOVE;
 }
 
@@ -265,7 +303,7 @@ static gboolean overlay_hide_idle(gpointer data) {
         g_source_remove(overlayTrackId);
         overlayTrackId = 0;
     }
-    gtk_widget_hide(overlayWin);
+    overlay_start_fade(TRUE);                          // fade out, then hide in the callback
     return G_SOURCE_REMOVE;
 }
 
@@ -277,7 +315,7 @@ void overlay_init(void) {
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(overlayWin), TRUE);
     gtk_window_set_keep_above(GTK_WINDOW(overlayWin), TRUE);
     gtk_window_set_accept_focus(GTK_WINDOW(overlayWin), FALSE);
-    gtk_widget_set_opacity(overlayWin, 0.92);
+    gtk_widget_set_opacity(overlayWin, 0.0);  // starts transparent; fades in on show
 
     // Give the window an alpha-capable visual so the corners outside the rounded
     // background are transparent — otherwise the radius has nothing to clip and the

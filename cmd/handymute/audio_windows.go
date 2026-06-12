@@ -8,7 +8,121 @@ import (
 
 	ole "github.com/go-ole/go-ole"
 	"github.com/moutend/go-wca/pkg/wca"
+	"golang.org/x/sys/windows"
 )
+
+// meetingApps are the process image names whose render volume the Meeting Volume slider
+// controls. Matched case-insensitively against each session's owning process.
+var meetingApps = map[string]bool{
+	"teams.exe": true, "ms-teams.exe": true,
+	"discord.exe":         true,
+	"ts3client_win64.exe": true, "ts3client_win32.exe": true, "teamspeak.exe": true,
+	"zoom.exe": true,
+}
+
+// applyMeetingVolume sets the per-application output (render) volume of any running meeting
+// app to level (0..1) — the raw app volume, independent of the ctrl+space ducking, like the
+// per-app slider in the Windows volume mixer. Windows persists it per app. Safe to call from
+// the UI thread (COM is already up there); initCOM tolerates an existing apartment.
+func applyMeetingVolume(level float32) {
+	initCOM()
+
+	var mmde *wca.IMMDeviceEnumerator
+	if wca.CoCreateInstance(wca.CLSID_MMDeviceEnumerator, 0, wca.CLSCTX_ALL, wca.IID_IMMDeviceEnumerator, &mmde) != nil {
+		return
+	}
+	defer mmde.Release()
+
+	var col *wca.IMMDeviceCollection
+	if mmde.EnumAudioEndpoints(wca.ERender, wca.DEVICE_STATE_ACTIVE, &col) != nil {
+		return
+	}
+	defer col.Release()
+
+	var n uint32
+	col.GetCount(&n)
+	set := 0
+	for i := uint32(0); i < n; i++ {
+		var dev *wca.IMMDevice
+		if col.Item(i, &dev) != nil {
+			continue
+		}
+		set += setMeetingSessions(dev, level)
+		dev.Release()
+	}
+	logf("meeting volume -> %.0f%% on %d app session(s)", level*100, set)
+}
+
+// setMeetingSessions sets the volume of every session on dev owned by a meeting app.
+func setMeetingSessions(dev *wca.IMMDevice, level float32) int {
+	var asm2 *wca.IAudioSessionManager2
+	if dev.Activate(wca.IID_IAudioSessionManager2, wca.CLSCTX_ALL, nil, &asm2) != nil {
+		return 0
+	}
+	defer asm2.Release()
+
+	var enum *wca.IAudioSessionEnumerator
+	if asm2.GetSessionEnumerator(&enum) != nil {
+		return 0
+	}
+	defer enum.Release()
+
+	var count int
+	enum.GetCount(&count)
+	set := 0
+	for i := 0; i < count; i++ {
+		var asc *wca.IAudioSessionControl
+		if enum.GetSession(i, &asc) != nil {
+			continue
+		}
+		if isMeetingSession(asc) {
+			var sav *wca.ISimpleAudioVolume
+			if asc.PutQueryInterface(wca.IID_ISimpleAudioVolume, &sav) == nil {
+				if sav.SetMasterVolume(level, nil) == nil {
+					set++
+				}
+				sav.Release()
+			}
+		}
+		asc.Release()
+	}
+	return set
+}
+
+// isMeetingSession reports whether the session is owned by a known meeting app.
+func isMeetingSession(asc *wca.IAudioSessionControl) bool {
+	var asc2 *wca.IAudioSessionControl2
+	if asc.PutQueryInterface(wca.IID_IAudioSessionControl2, &asc2) != nil {
+		return false
+	}
+	defer asc2.Release()
+
+	var pid uint32
+	if asc2.GetProcessId(&pid) != nil || pid == 0 {
+		return false
+	}
+	return meetingApps[strings.ToLower(processName(pid))]
+}
+
+// processName resolves a PID to its executable's base name (e.g. "Discord.exe").
+func processName(pid uint32) string {
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, pid)
+	if err != nil {
+		return ""
+	}
+	defer windows.CloseHandle(h)
+
+	buf := make([]uint16, windows.MAX_PATH)
+	size := uint32(len(buf))
+	if err := windows.QueryFullProcessImageName(h, 0, &buf[0], &size); err != nil {
+		return ""
+	}
+	full := windows.UTF16ToString(buf[:size])
+	if idx := strings.LastIndexAny(full, `\/`); idx >= 0 {
+		return full[idx+1:]
+	}
+	return full
+}
 
 // muteWorker owns all COM/WASAPI work on a single dedicated thread. It receives desired
 // hold states from the keyboard hook and applies two effects while ctrl+space is held:

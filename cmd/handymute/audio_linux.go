@@ -3,8 +3,10 @@
 package main
 
 import (
+	"encoding/json"
 	"os/exec"
 	"strconv"
+	"strings"
 )
 
 // pactlJSON runs `pactl --format=json <args...>` and returns stdout.
@@ -42,6 +44,52 @@ func setSourceOutputVolume(index, percent int) {
 
 func setSinkVolume(name string, percent int) {
 	_ = exec.Command("pactl", "set-sink-volume", name, strconv.Itoa(percent)+"%").Run()
+}
+
+func setSinkInputVolume(index, percent int) {
+	_ = exec.Command("pactl", "set-sink-input-volume", strconv.Itoa(index), strconv.Itoa(percent)+"%").Run()
+}
+
+// meetingAppHints identify a playback stream owned by a meeting/voice app, matched against
+// the sink-input's application.process.binary / application.name (case-insensitive).
+var meetingAppHints = []string{"teams", "discord", "teamspeak", "ts3client", "zoom"}
+
+// applyMeetingVolume sets the raw output volume of every running meeting app's playback
+// stream to level (0..1) — independent of the ctrl+space ducking. PipeWire/Pulse apply
+// per-stream volume in software, so this attenuates only those apps.
+func applyMeetingVolume(level float32) {
+	out, err := pactlJSON("list", "sink-inputs")
+	if err != nil {
+		logf("meeting volume: list sink-inputs: %v", err)
+		return
+	}
+	var inputs []struct {
+		Index      int               `json:"index"`
+		Properties map[string]string `json:"properties"`
+	}
+	if err := json.Unmarshal(out, &inputs); err != nil {
+		logf("meeting volume: parse sink-inputs: %v", err)
+		return
+	}
+	pct := pctScalar(level)
+	set := 0
+	for _, in := range inputs {
+		if isMeetingSinkInput(in.Properties) {
+			setSinkInputVolume(in.Index, pct)
+			set++
+		}
+	}
+	logf("meeting volume -> %d%% on %d app stream(s)", pct, set)
+}
+
+func isMeetingSinkInput(props map[string]string) bool {
+	hay := strings.ToLower(props["application.process.binary"] + " " + props["application.name"])
+	for _, h := range meetingAppHints {
+		if strings.Contains(hay, h) {
+			return true
+		}
+	}
+	return false
 }
 
 func trimNewline(b []byte) []byte {

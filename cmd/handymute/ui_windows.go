@@ -60,7 +60,7 @@ func runUI(settings *Settings, cmd chan<- bool, status <-chan bool) error {
 	if err := (dec.MainWindow{
 		AssignTo: &u.mw,
 		Title:    "HandyMute",
-		Size:     dec.Size{Width: 340, Height: 470},
+		Size:     dec.Size{Width: 340, Height: 560},
 		Layout:   dec.VBox{MarginsZero: true},
 		Visible:  false,
 	}).Create(); err != nil {
@@ -252,8 +252,12 @@ func (u *ui) showFlyout() {
 	u.roundCorners(w, h)
 	u.shownAt = time.Now()
 	u.onScreen = true
-	win.SetWindowPos(hwnd, 0, x, y, 0, 0, win.SWP_NOSIZE|win.SWP_NOZORDER)
+	// Force into the TOPMOST band (not SWP_NOZORDER) so the panel is reliably above all
+	// normal windows — relying on Activate() alone fails when Windows' foreground-lock
+	// refuses to activate a window opened from a tray click, leaving it behind others.
+	win.SetWindowPos(hwnd, win.HWND_TOPMOST, x, y, 0, 0, win.SWP_NOSIZE|win.SWP_SHOWWINDOW)
 	u.mw.Activate()
+	win.SetForegroundWindow(hwnd)
 	u.pushState() // make sure controls match current settings each time it opens
 }
 
@@ -267,8 +271,10 @@ func (u *ui) roundCorners(w, h int32) {
 	}
 }
 
-// makeFlyoutStyle strips the title bar and resize frame (borderless) and hides the taskbar
-// button, so the window is a bare popup panel.
+// makeFlyoutStyle strips the title bar and resize frame (borderless), hides the taskbar
+// button, and makes the window permanently TOPMOST so it always pops above other windows —
+// matching the status overlay. (Relying on a per-show SetWindowPos(HWND_TOPMOST) + Activate
+// proved unreliable: Windows can leave a tray-opened window behind the foreground app.)
 func (u *ui) makeFlyoutStyle() {
 	hwnd := u.mw.Handle()
 	style := win.GetWindowLong(hwnd, win.GWL_STYLE)
@@ -276,7 +282,7 @@ func (u *ui) makeFlyoutStyle() {
 	win.SetWindowLong(hwnd, win.GWL_STYLE, style)
 
 	ex := win.GetWindowLong(hwnd, win.GWL_EXSTYLE)
-	ex |= win.WS_EX_TOOLWINDOW
+	ex |= win.WS_EX_TOOLWINDOW | win.WS_EX_TOPMOST
 	win.SetWindowLong(hwnd, win.GWL_EXSTYLE, ex)
 
 	win.SetWindowPos(hwnd, 0, 0, 0, 0, 0,

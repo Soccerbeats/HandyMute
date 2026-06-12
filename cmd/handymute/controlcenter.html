@@ -124,6 +124,10 @@
       <div class="hdr"><div class="label">Inbound Volume</div><div class="val" id="spkVal">20%</div></div>
       <input type="range" id="speaker" min="0" max="100" value="20">
     </div>
+    <div class="col">
+      <div class="hdr"><div class="label">Meeting Volume</div><div class="val" id="meetingVal">100%</div></div>
+      <input type="range" id="meeting" min="0" max="100" value="100">
+    </div>
   </div>
 
   <div class="sec">Startup</div>
@@ -153,6 +157,7 @@
     $("startup").checked = !!s.startup;
     $("teams").value = s.teams; $("teamsVal").textContent = s.teams + "%";
     $("speaker").value = s.speaker; $("spkVal").textContent = s.speaker + "%";
+    $("meeting").value = s.meeting; $("meetingVal").textContent = s.meeting + "%";
     markPreset(s.outboundPreset || "quiet");
     $("ver").textContent = s.version || "";
   };
@@ -181,6 +186,10 @@
   $("speaker").addEventListener("input", e => {
     const v = +e.target.value; $("spkVal").textContent = v+"%";
     send({action:"speaker", value:v});
+  });
+  $("meeting").addEventListener("input", e => {
+    const v = +e.target.value; $("meetingVal").textContent = v+"%";
+    send({action:"meeting", value:v});
   });
 
   document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => {

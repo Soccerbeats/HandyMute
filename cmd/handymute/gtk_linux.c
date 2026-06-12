@@ -121,7 +121,7 @@ void ui_init(const char *html) {
 
 	win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
 	gtk_window_set_title(GTK_WINDOW(win), "HandyMute");
-	gtk_window_set_default_size(GTK_WINDOW(win), 340, 470);
+	gtk_window_set_default_size(GTK_WINDOW(win), 340, 560);
 	gtk_window_set_resizable(GTK_WINDOW(win), FALSE);
 	gtk_window_set_decorated(GTK_WINDOW(win), FALSE);
 	gtk_window_set_skip_taskbar_hint(GTK_WINDOW(win), TRUE);

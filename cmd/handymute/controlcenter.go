@@ -40,6 +40,11 @@ func handleControlMessage(raw string, settings *Settings, cmd chan<- bool, eval 
 		var v int
 		json.Unmarshal(m.Value, &v)
 		settings.SetSpeakerDuck(float32(v) / 100)
+	case "meeting":
+		var v int
+		json.Unmarshal(m.Value, &v)
+		settings.SetMeetingVolume(float32(v) / 100)
+		applyMeetingVolume(settings.MeetingVolume()) // platform-specific; takes effect immediately
 	case "startup":
 		var on bool
 		json.Unmarshal(m.Value, &on)
@@ -73,6 +78,7 @@ func pushControlState(settings *Settings, eval func(js string)) {
 		"startup":        startupEnabled(),
 		"theme":          settings.Theme(),
 		"overlay":        settings.Overlay(),
+		"meeting":        pct(settings.MeetingVolume()),
 		"version":        version,
 	}
 	b, err := json.Marshal(state)

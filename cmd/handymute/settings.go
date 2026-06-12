@@ -26,6 +26,7 @@ type Settings struct {
 	cableMatch  string  // case-insensitive substring identifying the VB-Cable render endpoint
 	theme       string  // UI theme for the control-center panel: "dark" or "light"
 	overlay     bool    // show the on-screen status pill while dictating
+	meetingVol  float32 // 0..1 — raw per-app output volume for meeting apps (Teams/Discord/TeamSpeak)
 }
 
 // Snapshot is an immutable copy of the settings the audio worker needs for one toggle.
@@ -47,6 +48,7 @@ func defaultSettings() *Settings {
 		cableMatch:  "cable input",
 		theme:       "dark",
 		overlay:     true,
+		meetingVol:  1.00,
 	}
 }
 
@@ -72,6 +74,19 @@ func (s *Settings) SpeakerDuck() float32 {
 func (s *Settings) SetSpeakerDuck(v float32) {
 	s.mu.Lock()
 	s.speakerDuck = clamp01(v)
+	s.mu.Unlock()
+	s.save()
+}
+
+func (s *Settings) MeetingVolume() float32 {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.meetingVol
+}
+
+func (s *Settings) SetMeetingVolume(v float32) {
+	s.mu.Lock()
+	s.meetingVol = clamp01(v)
 	s.mu.Unlock()
 	s.save()
 }
@@ -241,6 +256,10 @@ func loadSettings() *Settings {
 			}
 		case "overlay":
 			s.overlay = val == "true" || val == "1" || val == "yes"
+		case "meeting_volume":
+			if v, err := strconv.ParseFloat(val, 32); err == nil {
+				s.meetingVol = clamp01(float32(v))
+			}
 		}
 	}
 	s.teamsLevel = s.resolveOutLocked() // live Outbound level always follows the active preset
@@ -260,8 +279,9 @@ func (s *Settings) save() {
 			"outbound_preset=%s\n"+
 			"cable=%s\n"+
 			"theme=%s\n"+
-			"overlay=%t\n",
-		s.enabled, s.speakerDuck, s.outMute, s.outQuiet, s.outFull, s.outPreset, s.cableMatch, s.theme, s.overlay)
+			"overlay=%t\n"+
+			"meeting_volume=%.3f\n",
+		s.enabled, s.speakerDuck, s.outMute, s.outQuiet, s.outFull, s.outPreset, s.cableMatch, s.theme, s.overlay, s.meetingVol)
 	s.mu.RUnlock()
 
 	if err := os.WriteFile(settingsPath(), []byte(body), 0644); err != nil {

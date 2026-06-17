@@ -61,6 +61,12 @@ func main() {
 		return
 	}
 
+	// Enforce a single running instance. If one is already up, claimSingleInstance signals it
+	// to surface its panel; this process then exits.
+	if !claimSingleInstance() {
+		return
+	}
+
 	settings := loadSettings()
 	snap := settings.Snapshot()
 	logf("handymute starting. enabled=%t  teammates=%.0f%%  my-volume=%.0f%%  cable=%q",

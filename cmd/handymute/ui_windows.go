@@ -119,6 +119,12 @@ func runUI(settings *Settings, cmd chan<- bool, status <-chan bool) error {
 		}
 	}()
 
+	// When a second instance is launched, it signals us to surface the panel instead of
+	// opening its own window.
+	go waitForActivate(func() {
+		u.mw.Synchronize(u.showFlyout)
+	})
+
 	u.mw.Run()
 	return nil
 }

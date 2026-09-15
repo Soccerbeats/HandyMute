@@ -13,6 +13,12 @@ import (
 
 // meetingApps are the process image names whose render volume the Meeting Volume slider
 // controls. Matched case-insensitively against each session's owning process.
+//
+// Browsers (chrome.exe / msedge.exe) are deliberately NOT included: Chromium routes all its
+// audio through one shared audio-service process and exposes no per-tab/PWA identity via the
+// WASAPI session API (empty display name/icon; the session id carries only the exe path), so
+// there is no way to target a Teams PWA/tab without grabbing every other browser tab too.
+// Meeting-in-browser therefore isn't supportable per-app — use the native Teams desktop app.
 var meetingApps = map[string]bool{
 	"teams.exe": true, "ms-teams.exe": true,
 	"discord.exe":         true,

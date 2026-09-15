@@ -49,8 +49,11 @@ Hold **Ctrl+Space** to dictate, as usual. Click the tray microphone to open the 
 - **Enabled** — master on/off (when off, Ctrl+Space passes straight through to Handy)
 - **Teammates hear me at** — 0% (silent) up to 100%, with quick **Mute me / Quiet / Full volume** buttons
 - **My volume while dictating** — how far all your output dims while held
+- **Meeting Volume** — the raw output volume of meeting apps (Teams, Discord, TeamSpeak, Zoom), independent of dictation
 - **Theme** — dark / light
 - **Start at login**
+
+> **Meeting Volume works only for native desktop apps** (e.g. the **new Teams** desktop app, `ms-teams.exe`), not for meetings running in a **browser tab or Chrome/Edge PWA**. Chromium routes all its audio through one shared process and exposes no per-tab identity to the Windows audio API, so there is no way to single out Teams from other browser audio. Use the desktop Teams app for per-app volume control.
 
 ---
 
